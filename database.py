@@ -1,7 +1,7 @@
 import chromadb
 from tqdm import tqdm
 from chromadb import Documents, EmbeddingFunction, Embeddings
-from langchain.document_loaders import Docx2txtLoader
+from langchain.document_loaders import Docx2txtLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from BCEmbedding import EmbeddingModel, RerankerModel
 
@@ -11,8 +11,11 @@ embedding_model = EmbeddingModel(model_name_or_path="maidalun1020/bce-embedding-
 
 def create_and_add_ele(documents=None, adding=False):
     client = chromadb.HttpClient(host='localhost', port=8000)
-    # collection = client.create_collection(name="my_collection", embedding_function=MyEmbeddingFunction)
+    # my_collection for diangpt
     collection = client.get_or_create_collection(name="my_collection", embedding_function=MyEmbeddingFunction())
+    
+    # interior_design for prompt generator
+    # collection = client.get_or_create_collection(name="interior_design", embedding_function=MyEmbeddingFunction())
     
     if adding and documents is not None:
         documents_content = [doc.page_content.replace('\n', '').replace('\r', '').replace('\t', '') 
@@ -29,6 +32,16 @@ def create_and_add_ele(documents=None, adding=False):
 
 def load_docx(path_for_docx):
     loader = Docx2txtLoader(path_for_docx)
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size = 1024,
+        chunk_overlap  = 128,
+    )
+    documents = text_splitter.split_documents(documents)
+    return documents
+
+def load_pdf(path_for_pdf):
+    loader = PyPDFLoader(path_for_pdf)
     documents = loader.load()
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size = 1024,
@@ -58,11 +71,11 @@ class Query():
         )
 
         passages = out['documents'][0]
-
+        min_search_distance = out['distances'][0][0]
         sentence_pairs = [[query, passage] for passage in passages]
 
         scores = self.rank_model.compute_score(sentence_pairs)
 
         rerank_results = self.rank_model.rerank(query, passages)
 
-        return rerank_results
+        return rerank_results, min_search_distance
